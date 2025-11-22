@@ -1,19 +1,21 @@
 # Multi-stage Dockerfile for NestJS Backend
 # Optimized for production with native dependencies (sharp, onnxruntime-node, bcrypt)
+# Using Debian Slim instead of Alpine for glibc compatibility with onnxruntime-node
 
 # Stage 1: Base image with dependencies
-FROM node:20-alpine AS base
+FROM node:20-slim AS base
 
 # Install system dependencies required for native modules
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y \
     python3 \
     make \
     g++ \
-    cairo-dev \
-    jpeg-dev \
-    pango-dev \
-    giflib-dev \
-    pixman-dev
+    libcairo2-dev \
+    libjpeg-dev \
+    libpango1.0-dev \
+    libgif-dev \
+    libpixman-1-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -70,20 +72,21 @@ COPY packages/backend/tsconfig.json ./packages/backend/
 RUN npm ci --workspaces --if-present --omit=dev
 
 # Stage 5: Final production image
-FROM node:20-alpine AS production
+FROM node:20-slim AS production
 
 # Install runtime dependencies for native modules
-RUN apk add --no-cache \
-    cairo \
-    jpeg \
-    pango \
-    giflib \
-    pixman \
-    dumb-init
+RUN apt-get update && apt-get install -y \
+    libcairo2 \
+    libjpeg62-turbo \
+    libpango-1.0-0 \
+    libgif7 \
+    libpixman-1-0 \
+    dumb-init \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nestjs -u 1001
+RUN groupadd --gid 1001 nodejs && \
+    useradd --uid 1001 --gid nodejs --shell /bin/bash --create-home nestjs
 
 WORKDIR /app
 
