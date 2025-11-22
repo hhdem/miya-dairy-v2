@@ -57,18 +57,23 @@ services:
       - ./packages/frontend-public/dist:/srv/public:ro
       - ./packages/frontend-admin/dist:/srv/admin:ro
       - uploads:/srv/uploads:ro
+      - caddy_data:/data  # SSL 证书持久化
+      - caddy_config:/config  # Caddy 配置持久化
     ports:
-      - "80:80"
+      - "80:80"  # 使用 8080 端口避免与本地服务冲突
       - "443:443"
     depends_on:
       - backend
     networks:
       - miya-network
+    restart: unless-stopped
 
 volumes:
   postgres_data:
   uploads:
   ml_models:
+  caddy_data:  # Caddy SSL 证书和 ACME 数据
+  caddy_config:  # Caddy 自动保存的配置
 
 networks:
   miya-network:

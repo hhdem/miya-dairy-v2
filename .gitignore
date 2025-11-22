@@ -54,6 +54,7 @@ temp/
 # ML Models (large files, should be downloaded separately)
 infrastructure/ml-models/*.onnx
 
+Caddyfile
 # Package manager locks (keep package-lock.json but ignore others)
 # yarn.lock
 # pnpm-lock.yaml

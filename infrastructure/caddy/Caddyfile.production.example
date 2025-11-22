@@ -1,0 +1,85 @@
+# 生产环境 Caddyfile 配置示例
+# 使用真实域名并自动获取 Let's Encrypt SSL 证书
+# 
+# 使用方法：
+# 1. 复制此文件为 Caddyfile: cp Caddyfile.production.example Caddyfile
+# 2. 替换 miya.im 为你的实际域名
+# 3. 确保域名 DNS 已正确指向服务器 IP
+# 4. 确保端口 80 和 443 在防火墙中开放
+# 5. 在 docker-compose.yml 中使用端口 80:80 和 443:443
+
+# 主域名和 www 子域名
+miya.im www.miya.im {
+    # 启用 gzip 压缩
+    encode gzip
+    
+    # 配置 ACME 邮箱（用于 SSL 证书通知）
+    # tls your-email@example.com
+    
+    # 后端 API 反向代理（优先级最高）
+    handle /api/* {
+        reverse_proxy miya-dairy-backend:3000
+    }
+    
+    # 上传文件（静态资源）
+    handle /uploads/* {
+        root * /srv
+        file_server {
+            # 设置缓存头
+            header Cache-Control "public, max-age=31536000"
+        }
+    }
+    
+    # 管理后台（需要认证的路由）
+    handle /admin/* {
+        root * /srv/admin
+        try_files {path} /index.html
+        file_server
+        
+        # 可选：添加基本认证保护
+        # basicauth {
+        #     admin $2a$14$...  # 使用 caddy hash-password 生成
+        # }
+    }
+    
+    # 公共前端
+    handle /public/* {
+        root * /srv/public
+        try_files {path} /index.html
+        file_server
+    }
+    
+    # 根路径重定向到公共前端
+    handle / {
+        redir /public/ permanent
+    }
+    
+    # 安全头部
+    header {
+        # 启用 HSTS
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        # 防止点击劫持
+        X-Frame-Options "SAMEORIGIN"
+        # 防止 MIME 类型嗅探
+        X-Content-Type-Options "nosniff"
+        # XSS 保护
+        X-XSS-Protection "1; mode=block"
+        # 引用策略
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+    
+    # 访问日志
+    log {
+        output file /var/log/caddy/access.log {
+            roll_size 100mb
+            roll_keep 10
+        }
+        format json
+    }
+}
+
+# 可选：配置 ACME 使用 DNS 挑战（如果 HTTP 挑战不可用）
+# {
+#     acme_dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+# }
+
