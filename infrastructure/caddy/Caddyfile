@@ -1,0 +1,21 @@
+miya.im www.miya.im {
+    encode gzip
+    handle_path /public/* {
+        root * /srv/public
+        try_files {path} /public/index.html
+        file_server
+    }
+    handle_path /admin/* {
+        root * /srv/admin
+        try_files {path} /admin/index.html
+        file_server
+    }
+    handle_path /uploads/* {
+        root * /srv/uploads
+        file_server
+    }
+    # 后端API反代
+    handle_path /api/* {
+        reverse_proxy miya-dairy-backend:3000
+    }
+}
