@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import toast, { Toaster } from 'react-hot-toast';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { photosApi } from '../api/photos';
 import { categoriesApi } from '../api/categories';
 import { tagsApi } from '../api/tags';
@@ -13,6 +15,7 @@ export default function PhotoDetail() {
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [newTagName, setNewTagName] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -31,7 +34,7 @@ export default function PhotoDetail() {
       setCategories(categoriesData);
     } catch (error) {
       console.error('Failed to load photo:', error);
-      alert('Failed to load photo');
+      toast.error('Failed to load photo');
       navigate('/dashboard');
     } finally {
       setLoading(false);
@@ -45,9 +48,10 @@ export default function PhotoDetail() {
       await photosApi.update(id, {
         categoryId: categoryId || null,
       });
+      toast.success('Category updated');
       loadData();
     } catch (error) {
-      alert('Failed to update category');
+      toast.error('Failed to update category');
     }
   };
 
@@ -56,9 +60,10 @@ export default function PhotoDetail() {
 
     try {
       await photosApi.update(id, { visibility });
+      toast.success(`Photo set to ${visibility}`);
       loadData();
     } catch (error) {
-      alert('Failed to update visibility');
+      toast.error('Failed to update visibility');
     }
   };
 
@@ -67,10 +72,11 @@ export default function PhotoDetail() {
 
     try {
       await tagsApi.addToPhoto(id, { tagName: newTagName.trim() });
+      toast.success(`Tag "${newTagName}" added`);
       setNewTagName('');
       loadData();
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Failed to add tag');
+      toast.error(error.response?.data?.message || 'Failed to add tag');
     }
   };
 
@@ -79,20 +85,28 @@ export default function PhotoDetail() {
 
     try {
       await tagsApi.removeFromPhoto(id, tagId);
+      toast.success('Tag removed');
       loadData();
     } catch (error) {
-      alert('Failed to remove tag');
+      toast.error('Failed to remove tag');
     }
   };
 
-  const handleDelete = async () => {
-    if (!id || !confirm('Are you sure you want to delete this photo?')) return;
+  const handleDelete = () => {
+    if (!id) return;
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!id) return;
+    setShowDeleteConfirm(false);
 
     try {
       await photosApi.delete(id);
+      toast.success('Photo deleted');
       navigate('/dashboard');
     } catch (error) {
-      alert('Failed to delete photo');
+      toast.error('Failed to delete photo');
     }
   };
 
@@ -110,6 +124,7 @@ export default function PhotoDetail() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <Toaster />
       {/* Header */}
       <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
@@ -258,6 +273,18 @@ export default function PhotoDetail() {
           </div>
         </div>
       </main>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title="Delete Photo"
+        message="Are you sure you want to delete this photo? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+        onConfirm={confirmDelete}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   );
 }

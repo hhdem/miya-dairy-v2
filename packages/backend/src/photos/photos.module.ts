@@ -6,6 +6,8 @@ import { PhotosService } from './photos.service';
 import { PhotoProcessingService } from './services/photo-processing.service';
 import { StorageService } from './services/storage.service';
 import { MlAnalysisService } from './services/ml-analysis.service';
+import { YoloDetectionService } from './services/yolo-detection.service';
+import { FaceEmotionService } from './services/face-emotion.service';
 import { Photo } from '../database/entities/photo.entity';
 import { Category } from '../database/entities/category.entity';
 import { Tag } from '../database/entities/tag.entity';
@@ -27,6 +29,8 @@ import { Analysis } from '../database/entities/analysis.entity';
     PhotoProcessingService,
     StorageService,
     MlAnalysisService,
+    YoloDetectionService,
+    FaceEmotionService,
   ],
   exports: [PhotosService],
 })

@@ -15,6 +15,12 @@ export enum TagSource {
   MANUAL = 'manual', // User-added
 }
 
+export enum TagType {
+  OBJECT = 'object', // Object detection
+  EMOTION = 'emotion', // Emotion recognition
+  SCENE = 'scene', // Scene/general classification
+}
+
 @Entity('photo_tags')
 @Index('idx_photo_tag_composite', ['photoId', 'tagId'], { unique: true })
 @Index('idx_photo_tag_photo_id', ['photoId'])
@@ -35,6 +41,9 @@ export class PhotoTag {
 
   @Column({ type: 'enum', enum: TagSource })
   source!: TagSource;
+
+  @Column({ type: 'enum', enum: TagType, default: TagType.SCENE })
+  type!: TagType;
 
   @CreateDateColumn()
   createdAt!: Date;

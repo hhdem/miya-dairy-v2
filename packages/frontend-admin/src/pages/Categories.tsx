@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast, { Toaster } from 'react-hot-toast';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { categoriesApi } from '../api/categories';
 import { authApi } from '../api/auth';
 import type { CategoryDto } from '@miya-dairy/shared';
@@ -10,6 +12,7 @@ export default function Categories() {
   const [editingCategory, setEditingCategory] = useState<CategoryDto | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategorySlug, setNewCategorySlug] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -27,8 +30,8 @@ export default function Categories() {
     }
   };
 
-  const handleLogout = async () => {
-    await authApi.logout();
+  const handleLogout = () => {
+    authApi.clearToken();
     navigate('/login');
   };
 
@@ -39,14 +42,13 @@ export default function Categories() {
     try {
       await categoriesApi.create({
         name: newCategoryName,
-        slug: newCategorySlug || generateSlug(newCategoryName),
       });
       setNewCategoryName('');
       setNewCategorySlug('');
       loadCategories();
-      alert('Category created successfully!');
+      toast.success('Category created successfully!');
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Failed to create category');
+      toast.error(error.response?.data?.message || 'Failed to create category');
     }
   };
 
@@ -57,27 +59,30 @@ export default function Categories() {
     try {
       await categoriesApi.update(editingCategory.id, {
         name: editingCategory.name,
-        slug: editingCategory.slug,
       });
       setEditingCategory(null);
       loadCategories();
-      alert('Category updated successfully!');
+      toast.success('Category updated successfully!');
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Failed to update category');
+      toast.error(error.response?.data?.message || 'Failed to update category');
     }
   };
 
-  const handleDeleteCategory = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete "${name}"? Photos will be moved to Uncategorized.`)) {
-      return;
-    }
+  const handleDeleteCategory = (id: string, name: string) => {
+    setDeleteConfirm({ id, name });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
 
     try {
-      await categoriesApi.delete(id);
+      await categoriesApi.delete(deleteConfirm.id);
       loadCategories();
-      alert('Category deleted successfully!');
+      toast.success('Category deleted successfully!');
+      setDeleteConfirm(null);
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Failed to delete category');
+      toast.error(error.response?.data?.message || 'Failed to delete category');
+      setDeleteConfirm(null);
     }
   };
 
@@ -98,6 +103,7 @@ export default function Categories() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <Toaster />
       {/* Header */}
       <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
@@ -253,6 +259,20 @@ export default function Categories() {
           </div>
         )}
       </main>
+
+      {/* Delete Confirmation Dialog */}
+      {deleteConfirm && (
+        <ConfirmDialog
+          isOpen={true}
+          title="Delete Category"
+          message={`Are you sure you want to delete "${deleteConfirm.name}"? Photos in this category will be moved to Uncategorized.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          variant="danger"
+          onConfirm={confirmDelete}
+          onCancel={() => setDeleteConfirm(null)}
+        />
+      )}
     </div>
   );
 }

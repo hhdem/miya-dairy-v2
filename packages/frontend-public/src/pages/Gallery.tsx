@@ -1,191 +1,776 @@
 import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { galleryApi } from '../api/gallery';
-import PhotoCard from '../components/PhotoCard';
-import PhotoModal from '../components/PhotoModal';
-import type { PhotoDto, CategoryDto } from '@miya-dairy/shared';
+import { getImageUrl } from '../api/client';
+import type { PhotoDto, CategoryDto, TagDto } from '@miya-dairy/shared';
+import { cn, formatDate, groupPhotosByDate, groupPhotosByCategory } from '../lib/utils';
+import { IconCalendar, IconFolder, IconTag, IconGrid3x3, IconMenu2, IconX, IconSortDescending, IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
+
+type GroupMode = 'date' | 'category' | 'none';
+type SortMode = 'date-desc' | 'category-name';
 
 export default function Gallery() {
+  // Detect if device is mobile
+  const isMobile = () => {
+    return window.innerWidth < 768; // Tailwind's md breakpoint
+  };
+
   const [photos, setPhotos] = useState<PhotoDto[]>([]);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [selectedPhoto, setSelectedPhoto] = useState<PhotoDto | null>(null);
+  const [tags, setTags] = useState<TagDto[]>([]);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [error, setError] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
+  const [selectedPhoto, setSelectedPhoto] = useState<PhotoDto | null>(null);
+  const [groupMode, setGroupMode] = useState<GroupMode>('date');
+  const [sortMode, setSortMode] = useState<SortMode>('date-desc');
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [mergedView, setMergedView] = useState(() => isMobile()); // Mobile: merged, Desktop: expanded
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadData();
-  }, [page, selectedCategory]);
+  }, []);
 
   const loadData = async () => {
     try {
-      setLoading(true);
-      setError('');
-
-      const [photosResponse, categoriesData] = await Promise.all([
-        galleryApi.getPhotos(page, 20, selectedCategory || undefined),
-        page === 1 ? galleryApi.getCategories() : Promise.resolve(categories),
+      const [photosResponse, categoriesData, tagsData] = await Promise.all([
+        galleryApi.getPhotos(1, 1000), // Load all photos
+        galleryApi.getCategories(),
+        galleryApi.getTags(),
       ]);
 
-      // Filter only public photos
-      const publicPhotos = photosResponse.data.filter(
-        (p) => p.visibility === 'public',
-      );
-
-      setPhotos(publicPhotos);
-      setTotalPages(photosResponse.meta.totalPages);
-
-      if (page === 1) {
-        setCategories(categoriesData);
-      }
-    } catch (err) {
-      console.error('Failed to load gallery:', err);
-      setError('Failed to load photos. Please try again later.');
+      setPhotos(photosResponse.data.filter((p) => p.visibility === 'public'));
+      setCategories(categoriesData);
+      setTags(tagsData);
+    } catch (error) {
+      console.error('Failed to load data:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCategoryChange = (categoryId: string) => {
-    setSelectedCategory(categoryId);
-    setPage(1);
+  const toggleTag = (tagId: string) => {
+    const newTags = new Set(selectedTags);
+    if (newTags.has(tagId)) {
+      newTags.delete(tagId);
+    } else {
+      newTags.add(tagId);
+    }
+    setSelectedTags(newTags);
   };
 
-  const handlePhotoClick = async (photo: PhotoDto) => {
-    try {
-      // Load full photo details
-      const fullPhoto = await galleryApi.getPhotoById(photo.id);
-      setSelectedPhoto(fullPhoto);
-    } catch (err) {
-      console.error('Failed to load photo details:', err);
+  const toggleGroupExpansion = (groupKey: string) => {
+    const newExpandedGroups = new Set(expandedGroups);
+    if (newExpandedGroups.has(groupKey)) {
+      newExpandedGroups.delete(groupKey);
+    } else {
+      newExpandedGroups.add(groupKey);
     }
+    setExpandedGroups(newExpandedGroups);
   };
+
+  const filteredPhotos = photos.filter((photo) => {
+    // Category filter
+    if (selectedCategory && photo.category?.id !== selectedCategory) {
+      return false;
+    }
+
+    // Tags filter - OR logic (union): show photos that have ANY of the selected tags
+    if (selectedTags.size > 0) {
+      const photoTagIds = photo.tags?.map((t) => t.tag.id) || [];
+      const hasAnyTag = Array.from(selectedTags).some((tagId) =>
+        photoTagIds.includes(tagId)
+      );
+      if (!hasAnyTag) return false;
+    }
+
+    return true;
+  });
+
+  // Apply sorting
+  const sortedPhotos = [...filteredPhotos].sort((a, b) => {
+    if (sortMode === 'date-desc') {
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    } else if (sortMode === 'category-name') {
+      const catA = a.category?.name || 'Uncategorized';
+      const catB = b.category?.name || 'Uncategorized';
+      return catA.localeCompare(catB);
+    }
+    return 0;
+  });
+
+  const renderGroupedPhotos = () => {
+    if (groupMode === 'none') {
+      return (
+        <MasonryGrid photos={sortedPhotos} onPhotoClick={setSelectedPhoto} />
+      );
+    }
+
+    if (groupMode === 'date') {
+      const groups = groupPhotosByDate(sortedPhotos);
+
+      if (!mergedView) {
+        // Show all groups expanded
+        return (
+          <div className="space-y-12">
+            {Array.from(groups.entries()).map(([date, groupPhotos]) => (
+              <div key={date}>
+                <h2 className="text-2xl font-bold mb-6 flex items-center gap-2 text-gray-800">
+                  <IconCalendar className="w-6 h-6" />
+                  {formatDate(groupPhotos[0].createdAt)}
+                </h2>
+                <MasonryGrid photos={groupPhotos} onPhotoClick={setSelectedPhoto} />
+              </div>
+            ))}
+          </div>
+        );
+      }
+
+      // Merged view mode
+      return (
+        <div className="space-y-8">
+          {Array.from(groups.entries()).map(([date, groupPhotos]) => {
+            const groupKey = `date-${date}`;
+            const isExpanded = expandedGroups.has(groupKey);
+
+            return (
+              <div key={date}>
+                <h2 className="text-2xl font-bold mb-4 flex items-center gap-2 text-gray-800">
+                  <IconCalendar className="w-6 h-6" />
+                  {formatDate(groupPhotos[0].createdAt)}
+                </h2>
+                {isExpanded ? (
+                  <MasonryGrid photos={groupPhotos} onPhotoClick={setSelectedPhoto} />
+                ) : (
+                  <MergedCard
+                    photos={groupPhotos}
+                    groupKey={groupKey}
+                    onToggle={() => toggleGroupExpansion(groupKey)}
+                    onPhotoClick={setSelectedPhoto}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    if (groupMode === 'category') {
+      const groups = groupPhotosByCategory(sortedPhotos);
+
+      if (!mergedView) {
+        // Show all groups expanded
+        return (
+          <div className="space-y-12">
+            {Array.from(groups.entries()).map(([categoryName, groupPhotos]) => (
+              <div key={categoryName}>
+                <h2 className="text-2xl font-bold mb-6 flex items-center gap-2 text-gray-800">
+                  <IconFolder className="w-6 h-6" />
+                  {categoryName}
+                </h2>
+                <MasonryGrid photos={groupPhotos} onPhotoClick={setSelectedPhoto} />
+              </div>
+            ))}
+          </div>
+        );
+      }
+
+      // Merged view mode
+      return (
+        <div className="space-y-8">
+          {Array.from(groups.entries()).map(([categoryName, groupPhotos]) => {
+            const groupKey = `category-${categoryName}`;
+            const isExpanded = expandedGroups.has(groupKey);
+
+            return (
+              <div key={categoryName}>
+                <h2 className="text-2xl font-bold mb-4 flex items-center gap-2 text-gray-800">
+                  <IconFolder className="w-6 h-6" />
+                  {categoryName}
+                </h2>
+                {isExpanded ? (
+                  <MasonryGrid photos={groupPhotos} onPhotoClick={setSelectedPhoto} />
+                ) : (
+                  <MergedCard
+                    photos={groupPhotos}
+                    groupKey={groupKey}
+                    onToggle={() => toggleGroupExpansion(groupKey)}
+                    onPhotoClick={setSelectedPhoto}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // Default fallback
+    return <MasonryGrid photos={sortedPhotos} onPhotoClick={setSelectedPhoto} />;
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
+        <div className="text-xl text-gray-600 animate-pulse">Loading gallery...</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
       {/* Header */}
-      <header className="bg-white shadow-sm sticky top-0 z-40">
+      <header className="sticky top-0 z-40 backdrop-blur-md bg-white/70 border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <h1 className="text-4xl font-bold text-gray-900 text-center">
-            Miya Dairy Gallery
-          </h1>
-          <p className="text-center text-gray-600 mt-2">
-            Explore our photo collection
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                Miya Dairy Gallery
+              </h1>
+              <p className="text-gray-600 mt-2">{sortedPhotos.length} photos</p>
+            </div>
+            <button
+              onClick={() => setDrawerOpen(true)}
+              className="p-3 hover:bg-gray-100 rounded-lg transition-all group"
+            >
+              <IconMenu2 className="w-6 h-6 text-purple-500 group-hover:text-purple-600 transition-colors" />
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* Filter Bar */}
-      <div className="bg-white border-b sticky top-[104px] z-30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex flex-col sm:flex-row items-center gap-4">
-            <label className="text-sm font-medium text-gray-700">
-              Filter by category:
-            </label>
-            <select
-              value={selectedCategory}
-              onChange={(e) => handleCategoryChange(e.target.value)}
-              className="flex-1 sm:flex-none px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Photos Grid */}
+        {sortedPhotos.length === 0 ? (
+          <div className="text-center py-20 text-gray-500">
+            <p className="text-lg">No photos match your filters</p>
+          </div>
+        ) : (
+          renderGroupedPhotos()
+        )}
+      </div>
+
+      {/* Filter Drawer */}
+      <AnimatePresence>
+        {drawerOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setDrawerOpen(false)}
+              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50"
+            />
+
+            {/* Drawer */}
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+              className="fixed right-0 top-0 bottom-0 w-96 bg-white/95 backdrop-blur-lg shadow-2xl z-50 overflow-y-auto"
             >
-              <option value="">All Categories</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name} ({cat.photoCount})
-                </option>
-              ))}
-            </select>
+              <div className="p-6 space-y-6">
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-gray-200 pb-4">
+                  <h2 className="text-2xl font-bold text-gray-800">Filters</h2>
+                  <button
+                    onClick={() => setDrawerOpen(false)}
+                    className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                  >
+                    <IconX className="w-6 h-6 text-gray-600" />
+                  </button>
+                </div>
+
+                {/* Group Mode Selector */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <IconGrid3x3 className="w-5 h-5 text-gray-600" />
+                    <span className="text-sm font-medium text-gray-700">Group by</span>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={() => setGroupMode('date')}
+                      className={cn(
+                        'px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
+                        groupMode === 'date'
+                          ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      )}
+                    >
+                      <IconCalendar className="w-4 h-4" />
+                      Date
+                    </button>
+                    <button
+                      onClick={() => setGroupMode('category')}
+                      className={cn(
+                        'px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
+                        groupMode === 'category'
+                          ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      )}
+                    >
+                      <IconFolder className="w-4 h-4" />
+                      Category
+                    </button>
+                    <button
+                      onClick={() => setGroupMode('none')}
+                      className={cn(
+                        'px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
+                        groupMode === 'none'
+                          ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      )}
+                    >
+                      <IconGrid3x3 className="w-4 h-4" />
+                      All
+                    </button>
+                  </div>
+                </div>
+
+                {/* Merged View Toggle - Only show on mobile */}
+                {groupMode !== 'none' && isMobile() && (
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-700">Merged View</span>
+                      <button
+                        onClick={() => {
+                          setMergedView(!mergedView);
+                          if (!mergedView) {
+                            // When turning on merged view, clear all expanded groups
+                            setExpandedGroups(new Set());
+                          }
+                        }}
+                        className={cn(
+                          'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                          mergedView ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 'bg-gray-300'
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                            mergedView ? 'translate-x-6' : 'translate-x-1'
+                          )}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sort Selector */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <IconSortDescending className="w-5 h-5 text-gray-600" />
+                    <span className="text-sm font-medium text-gray-700">Sort by</span>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={() => setSortMode('date-desc')}
+                      className={cn(
+                        'px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
+                        sortMode === 'date-desc'
+                          ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      )}
+                    >
+                      Date (Newest First)
+                    </button>
+                    <button
+                      onClick={() => setSortMode('category-name')}
+                      className={cn(
+                        'px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center gap-2',
+                        sortMode === 'category-name'
+                          ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      )}
+                    >
+                      Category Name (A-Z)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Category Filter */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <IconFolder className="w-5 h-5 text-gray-600" />
+                    <span className="text-sm font-medium text-gray-700">Categories</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setSelectedCategory('')}
+                      className={cn(
+                        'px-4 py-2 rounded-full text-sm font-medium transition-all',
+                        selectedCategory === ''
+                          ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg'
+                          : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                      )}
+                    >
+                      All
+                    </motion.button>
+                    {categories.map((cat) => (
+                      <motion.button
+                        key={cat.id}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => setSelectedCategory(cat.id)}
+                        className={cn(
+                          'px-4 py-2 rounded-full text-sm font-medium transition-all',
+                          selectedCategory === cat.id
+                            ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg'
+                            : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                        )}
+                      >
+                        {cat.name} ({cat.photoCount})
+                      </motion.button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tags Filter */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <IconTag className="w-5 h-5 text-gray-600" />
+                    <span className="text-sm font-medium text-gray-700">Tags</span>
+                    {selectedTags.size > 0 && (
+                      <button
+                        onClick={() => setSelectedTags(new Set())}
+                        className="text-xs text-gray-500 hover:text-gray-700 ml-auto"
+                      >
+                        Clear all
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {tags.map((tag) => (
+                      <motion.button
+                        key={tag.id}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => toggleTag(tag.id)}
+                        className={cn(
+                          'px-3 py-1.5 rounded-full text-xs font-medium transition-all',
+                          selectedTags.has(tag.id)
+                            ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg'
+                            : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                        )}
+                      >
+                        # {tag.name}
+                      </motion.button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Photo Modal */}
+      <AnimatePresence>
+        {selectedPhoto && (
+          <PhotoModal
+            photo={selectedPhoto}
+            allPhotos={sortedPhotos}
+            onClose={() => setSelectedPhoto(null)}
+            onNavigate={setSelectedPhoto}
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// Merged Card Image Component - Individual image in merged card with skeleton
+function MergedCardImage({ photo }: { photo: PhotoDto }) {
+  const [imageLoaded, setImageLoaded] = useState(false);
+
+  return (
+    <div className="relative aspect-square overflow-hidden rounded-lg">
+      {!imageLoaded && (
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-200 to-gray-300 animate-pulse" />
+      )}
+      <img
+        src={getImageUrl(photo.mediumUrl || photo.thumbnailUrl)}
+        alt={photo.filename}
+        className={cn(
+          'w-full h-full object-cover transition-opacity duration-300',
+          imageLoaded ? 'opacity-100' : 'opacity-0'
+        )}
+        onLoad={() => setImageLoaded(true)}
+        onError={() => setImageLoaded(true)}
+        loading="lazy"
+      />
+    </div>
+  );
+}
+
+// Merged Card Component - Compact inline card showing preview with count
+function MergedCard({
+  photos,
+  onToggle,
+}: {
+  photos: PhotoDto[];
+  groupKey: string;
+  onToggle: () => void;
+  onPhotoClick: (photo: PhotoDto) => void;
+}) {
+  const previewPhotos = photos.slice(0, 3); // Show 3 images
+  const remainingCount = photos.length - previewPhotos.length;
+
+  return (
+    <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-4">
+      <motion.div
+        whileHover={{ scale: 1.02 }}
+        onClick={onToggle}
+        className="relative cursor-pointer rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all bg-white break-inside-avoid"
+      >
+        <div className="grid grid-cols-3 gap-1 p-1">
+          {previewPhotos.map((photo) => (
+            <MergedCardImage key={photo.id} photo={photo} />
+          ))}
+        </div>
+        {remainingCount > 0 && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/25 backdrop-blur-sm">
+            <div className="text-white text-3xl font-bold drop-shadow-lg">
+              +{remainingCount}
+            </div>
+          </div>
+        )}
+        <div className="absolute top-2 right-2 bg-white/95 backdrop-blur-sm px-2 py-1 rounded-full text-xs font-semibold text-gray-700 shadow-md">
+          {photos.length} photos
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// Masonry Grid Component
+function MasonryGrid({
+  photos,
+  onPhotoClick,
+}: {
+  photos: PhotoDto[];
+  onPhotoClick: (photo: PhotoDto) => void;
+}) {
+  return (
+    <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-4">
+      {photos.map((photo, index) => (
+        <motion.div
+          key={photo.id}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: index * 0.05 }}
+          className="break-inside-avoid"
+        >
+          <PhotoCard photo={photo} onClick={() => onPhotoClick(photo)} />
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+// Photo Card Component
+function PhotoCard({ photo, onClick }: { photo: PhotoDto; onClick: () => void }) {
+  const [imageLoaded, setImageLoaded] = useState(false);
+
+  return (
+    <motion.div
+      whileHover={{ scale: 1.02 }}
+      className="relative group cursor-pointer rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all bg-white"
+      onClick={onClick}
+    >
+      <div className="relative">
+        {!imageLoaded && (
+          <div className="absolute inset-0 bg-gradient-to-br from-gray-200 via-gray-100 to-gray-200 animate-pulse">
+            {/* Skeleton content */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-16 h-16 border-4 border-gray-300 border-t-purple-400 rounded-full animate-spin" />
+            </div>
+          </div>
+        )}
+        <img
+          src={getImageUrl(photo.mediumUrl || photo.thumbnailUrl)}
+          alt={photo.filename}
+          className={cn(
+            'w-full h-auto transition-opacity duration-500',
+            imageLoaded ? 'opacity-100' : 'opacity-0'
+          )}
+          onLoad={() => setImageLoaded(true)}
+          onError={() => setImageLoaded(true)}
+          loading="lazy"
+        />
+
+        {/* Gradient Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+        {/* Info Overlay */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 transform translate-y-full group-hover:translate-y-0 transition-transform duration-300">
+          <div className="space-y-2">
+            {/* Category */}
+            {photo.category && (
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 bg-blue-500/90 text-white text-xs rounded-full backdrop-blur-sm">
+                  {photo.category.name}
+                </span>
+              </div>
+            )}
+
+            {/* Tags */}
+            {photo.tags && photo.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {photo.tags.slice(0, 3).map((pt) => (
+                  <span
+                    key={pt.tag.id}
+                    className="px-2 py-0.5 bg-green-500/90 text-white text-xs rounded-full backdrop-blur-sm"
+                  >
+                    #{pt.tag.name}
+                  </span>
+                ))}
+                {photo.tags.length > 3 && (
+                  <span className="px-2 py-0.5 bg-gray-500/90 text-white text-xs rounded-full backdrop-blur-sm">
+                    +{photo.tags.length - 3}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
+    </motion.div>
+  );
+}
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-            {error}
-          </div>
-        )}
+// Photo Modal Component
+function PhotoModal({
+  photo,
+  allPhotos,
+  onClose,
+  onNavigate,
+}: {
+  photo: PhotoDto;
+  allPhotos: PhotoDto[];
+  onClose: () => void;
+  onNavigate: (photo: PhotoDto) => void;
+}) {
+  const currentIndex = allPhotos.findIndex((p) => p.id === photo.id);
+  const hasPrevious = currentIndex > 0;
+  const hasNext = currentIndex < allPhotos.length - 1;
 
-        {loading ? (
-          <div className="flex justify-center items-center py-20">
-            <div className="text-xl text-gray-500">Loading photos...</div>
-          </div>
-        ) : photos.length === 0 ? (
-          <div className="text-center py-20">
-            <svg
-              className="mx-auto h-16 w-16 text-gray-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-              />
-            </svg>
-            <h3 className="mt-4 text-xl font-medium text-gray-900">
-              No photos found
-            </h3>
-            <p className="mt-2 text-gray-500">
-              {selectedCategory
-                ? 'Try selecting a different category'
-                : 'Check back later for new photos!'}
-            </p>
-          </div>
-        ) : (
-          <>
-            {/* Photos Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-              {photos.map((photo) => (
-                <PhotoCard
-                  key={photo.id}
-                  photo={photo}
-                  onClick={() => handlePhotoClick(photo)}
-                />
-              ))}
-            </div>
+  const handlePrevious = () => {
+    if (hasPrevious) {
+      onNavigate(allPhotos[currentIndex - 1]);
+    }
+  };
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="mt-12 flex justify-center items-center gap-4">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  Previous
-                </button>
-                <span className="text-gray-700 font-medium">
-                  Page {page} of {totalPages}
-                </span>
-                <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  Next
-                </button>
-              </div>
+  const handleNext = () => {
+    if (hasNext) {
+      onNavigate(allPhotos[currentIndex + 1]);
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyboard = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft') handlePrevious();
+      if (e.key === 'ArrowRight') handleNext();
+    };
+    document.addEventListener('keydown', handleKeyboard);
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyboard);
+      document.body.style.overflow = 'unset';
+    };
+  }, [onClose, currentIndex]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      {/* Close button */}
+      <motion.button
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="absolute top-4 right-4 text-white text-4xl hover:text-gray-300 z-10 w-12 h-12 flex items-center justify-center rounded-full bg-white/10 backdrop-blur-sm"
+        onClick={onClose}
+      >
+        ×
+      </motion.button>
+
+      {/* Previous button */}
+      {hasPrevious && (
+        <motion.button
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          onClick={(e) => {
+            e.stopPropagation();
+            handlePrevious();
+          }}
+          className="absolute left-4 text-white hover:text-gray-300 z-10 w-12 h-12 flex items-center justify-center rounded-full bg-white/10 backdrop-blur-sm hover:bg-white/20 transition-all"
+        >
+          <IconChevronLeft className="w-8 h-8" />
+        </motion.button>
+      )}
+
+      {/* Next button */}
+      {hasNext && (
+        <motion.button
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleNext();
+          }}
+          className="absolute right-4 text-white hover:text-gray-300 z-10 w-12 h-12 flex items-center justify-center rounded-full bg-white/10 backdrop-blur-sm hover:bg-white/20 transition-all"
+        >
+          <IconChevronRight className="w-8 h-8" />
+        </motion.button>
+      )}
+
+      <motion.div
+        key={photo.id}
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        className="relative max-w-6xl max-h-full flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <img
+          src={getImageUrl(photo.originalUrl || photo.mediumUrl)}
+          alt={photo.filename}
+          className="max-w-full max-h-[80vh] object-contain rounded-lg"
+        />
+
+        <div className="mt-6 bg-white/10 backdrop-blur-md rounded-lg p-6 text-white">
+          <div className="flex flex-wrap gap-3">
+            {/* Category */}
+            {photo.category && (
+              <span className="px-4 py-2 bg-blue-500/80 rounded-full text-sm font-medium">
+                {photo.category.name}
+              </span>
             )}
-          </>
-        )}
-      </main>
 
-      {/* Photo Modal */}
-      <PhotoModal
-        photo={selectedPhoto}
-        onClose={() => setSelectedPhoto(null)}
-      />
-
-      {/* Footer */}
-      <footer className="bg-white border-t mt-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-center text-gray-600">
-          <p>&copy; 2024 Miya Dairy. All rights reserved.</p>
+            {/* Tags */}
+            {photo.tags?.map((pt) => (
+              <span
+                key={pt.tag.id}
+                className="px-4 py-2 bg-green-500/80 rounded-full text-sm font-medium"
+              >
+                #{pt.tag.name}
+              </span>
+            ))}
+          </div>
         </div>
-      </footer>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

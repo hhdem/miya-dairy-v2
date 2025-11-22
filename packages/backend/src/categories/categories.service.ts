@@ -46,17 +46,21 @@ export class CategoriesService {
   }
 
   async findAll(): Promise<CategoryDto[]> {
-    const categories = await this.categoryRepository.find({
-      order: { name: 'ASC' },
-    });
+    const categories = await this.categoryRepository
+      .createQueryBuilder('category')
+      .loadRelationCountAndMap('category.photoCount', 'category.photos')
+      .orderBy('category.name', 'ASC')
+      .getMany();
 
     return categories.map((c) => this.toCategoryDto(c));
   }
 
   async findOne(id: string): Promise<CategoryDto> {
-    const category = await this.categoryRepository.findOne({
-      where: { id },
-    });
+    const category = await this.categoryRepository
+      .createQueryBuilder('category')
+      .where('category.id = :id', { id })
+      .loadRelationCountAndMap('category.photoCount', 'category.photos')
+      .getOne();
 
     if (!category) {
       throw new NotFoundException(`Category with ID ${id} not found`);

@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast, { Toaster } from 'react-hot-toast';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { photosApi } from '../api/photos';
 import { categoriesApi } from '../api/categories';
 import { tagsApi } from '../api/tags';
@@ -20,6 +22,7 @@ export default function Dashboard() {
   const [showBatchMenu, setShowBatchMenu] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showTagModal, setShowTagModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [batchCategoryId, setBatchCategoryId] = useState<string>('');
   const [batchTagName, setBatchTagName] = useState('');
   const navigate = useNavigate();
@@ -70,9 +73,19 @@ export default function Dashboard() {
       }
 
       loadData();
-      alert(
-        `Upload complete!\n✓ Success: ${successCount}\n✗ Failed: ${failCount}`
-      );
+
+      // Show toast notification
+      if (failCount === 0) {
+        toast.success(`✓ Successfully uploaded ${successCount} ${successCount === 1 ? 'photo' : 'photos'}!`, {
+          duration: 4000,
+          position: 'top-right',
+        });
+      } else {
+        toast.error(`Upload complete: ${successCount} succeeded, ${failCount} failed`, {
+          duration: 5000,
+          position: 'top-right',
+        });
+      }
     } finally {
       setUploading(false);
       e.target.value = ''; // Reset input
@@ -103,14 +116,14 @@ export default function Dashboard() {
     try {
       await Promise.all(
         Array.from(selectedPhotos).map((photoId) =>
-          photosApi.updateVisibility(photoId, visibility)
+          photosApi.update(photoId, { visibility })
         )
       );
-      alert(`Set ${selectedPhotos.size} photos to ${visibility}`);
+      toast.success(`Set ${selectedPhotos.size} photos to ${visibility}`);
       clearSelection();
       loadData();
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Batch update failed');
+      toast.error(error.response?.data?.message || 'Batch update failed');
     }
   };
 
@@ -126,13 +139,13 @@ export default function Dashboard() {
           })
         )
       );
-      alert(`Updated ${selectedPhotos.size} photos`);
+      toast.success(`Updated ${selectedPhotos.size} photos`);
       clearSelection();
       setShowCategoryModal(false);
       setBatchCategoryId('');
       loadData();
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Batch update failed');
+      toast.error(error.response?.data?.message || 'Batch update failed');
     }
   };
 
@@ -143,39 +156,36 @@ export default function Dashboard() {
     try {
       await Promise.all(
         Array.from(selectedPhotos).map((photoId) =>
-          tagsApi.addToPhoto(photoId, batchTagName)
+          tagsApi.addToPhoto(photoId, { tagName: batchTagName })
         )
       );
-      alert(`Added tag "${batchTagName}" to ${selectedPhotos.size} photos`);
+      toast.success(`Added tag "${batchTagName}" to ${selectedPhotos.size} photos`);
       clearSelection();
       setShowTagModal(false);
       setBatchTagName('');
       loadData();
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Batch tag failed');
+      toast.error(error.response?.data?.message || 'Batch tag failed');
     }
   };
 
   const handleBatchDelete = async () => {
     if (selectedPhotos.size === 0) return;
+    setShowDeleteConfirm(true);
+  };
 
-    if (
-      !confirm(
-        `Are you sure you want to delete ${selectedPhotos.size} photos? This cannot be undone.`
-      )
-    ) {
-      return;
-    }
+  const confirmBatchDelete = async () => {
+    setShowDeleteConfirm(false);
 
     try {
       await Promise.all(
         Array.from(selectedPhotos).map((photoId) => photosApi.delete(photoId))
       );
-      alert(`Deleted ${selectedPhotos.size} photos`);
+      toast.success(`Deleted ${selectedPhotos.size} photos`);
       clearSelection();
       loadData();
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Batch delete failed');
+      toast.error(error.response?.data?.message || 'Batch delete failed');
     }
   };
 
@@ -189,6 +199,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <Toaster />
       {/* Header */}
       <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
@@ -521,6 +532,18 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title="Delete Photos"
+        message={`Are you sure you want to delete ${selectedPhotos.size} ${selectedPhotos.size === 1 ? 'photo' : 'photos'}? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+        onConfirm={confirmBatchDelete}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   );
 }

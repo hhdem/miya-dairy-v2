@@ -40,7 +40,7 @@ export class Analysis {
   createdAt!: Date;
 
   // Relations
-  @OneToOne(() => Photo, (photo) => photo.analysis)
+  @OneToOne(() => Photo, (photo) => photo.analysis, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'photoId' })
   photo!: Photo;
 }

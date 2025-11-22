@@ -10,7 +10,7 @@ import { Repository } from 'typeorm';
 import { Photo, PhotoVisibility, OriginalFormat } from '../database/entities/photo.entity';
 import { Category } from '../database/entities/category.entity';
 import { Tag } from '../database/entities/tag.entity';
-import { PhotoTag, TagSource } from '../database/entities/photo-tag.entity';
+import { PhotoTag, TagSource, TagType } from '../database/entities/photo-tag.entity';
 import { Analysis } from '../database/entities/analysis.entity';
 import { StorageService } from './services/storage.service';
 import { PhotoProcessingService } from './services/photo-processing.service';
@@ -172,6 +172,10 @@ export class PhotosService implements OnModuleInit {
         processingTimeMs: mlResult.processingTimeMs,
       });
 
+      this.logger.log(
+        `analysis`, JSON.stringify(analysis, null, 2),
+      );
+
       await this.analysisRepository.save(analysis);
 
       // Create or get tags and associate with photo
@@ -188,7 +192,7 @@ export class PhotosService implements OnModuleInit {
 
   private async createAutoTags(
     photoId: string,
-    mlTags: Array<{ tag: string; confidence: number }>,
+    mlTags: Array<{ tag: string; confidence: number; type: 'object' | 'emotion' | 'scene' }>,
   ): Promise<void> {
     for (const mlTag of mlTags) {
       // Generate slug
@@ -206,12 +210,44 @@ export class PhotosService implements OnModuleInit {
         tag = await this.tagRepository.save(tag);
       }
 
+      // Map type string to enum
+      let tagType: TagType;
+      switch (mlTag.type) {
+        case 'object':
+          tagType = TagType.OBJECT;
+          break;
+        case 'emotion':
+          tagType = TagType.EMOTION;
+          break;
+        case 'scene':
+        default:
+          tagType = TagType.SCENE;
+          break;
+      }
+
+      // Check if photo-tag association already exists
+      const existingPhotoTag = await this.photoTagRepository.findOne({
+        where: { photoId, tagId: tag.id },
+      });
+
+      if (existingPhotoTag) {
+        // Update with higher confidence if new confidence is higher
+        if (mlTag.confidence > (existingPhotoTag.confidence || 0)) {
+          existingPhotoTag.confidence = mlTag.confidence;
+          existingPhotoTag.type = tagType;
+          await this.photoTagRepository.save(existingPhotoTag);
+        }
+        // Skip if already exists
+        continue;
+      }
+
       // Create photo-tag association
       const photoTag = this.photoTagRepository.create({
         photoId,
         tagId: tag.id,
         confidence: mlTag.confidence,
         source: TagSource.AUTO,
+        type: tagType,
       });
 
       await this.photoTagRepository.save(photoTag);
