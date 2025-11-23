@@ -3,7 +3,7 @@ miya.im www.miya.im {
     encode gzip
     
     # 配置 ACME 邮箱（用于 SSL 证书通知）
-    # tls your-email@example.com
+    tls lukelukewe@gmail.com
     
     # 后端 API 反向代理（优先级最高）
     handle /api/* {
@@ -19,7 +19,7 @@ miya.im www.miya.im {
     }
     
     # 管理后台（需要认证的路由）
-    handle /admin/* {
+    handle_path /admin/* {
         root * /srv/admin
         try_files {path} /index.html
         file_server
@@ -31,15 +31,17 @@ miya.im www.miya.im {
     }
     
     # 公共前端
-    handle /public/* {
+    handle_path /public/* {
         root * /srv/public
         try_files {path} /index.html
         file_server
     }
-    
-    # 根路径重定向到公共前端
-    handle / {
-        redir /public/ permanent
+
+    # 根路径 - 直接提供公共前端（不重定向）
+    handle {
+        root * /srv/public
+        try_files {path} /index.html
+        file_server
     }
     
     # 安全头部
