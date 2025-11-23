@@ -59,6 +59,7 @@ export default function Categories() {
     try {
       await categoriesApi.update(editingCategory.id, {
         name: editingCategory.name,
+        isDefault: editingCategory.isDefault,
       });
       setEditingCategory(null);
       loadCategories();
@@ -180,7 +181,14 @@ export default function Categories() {
                   className="flex items-center justify-between p-3 border border-gray-200 rounded-md hover:bg-gray-50"
                 >
                   <div className="flex-1">
-                    <p className="font-medium text-gray-900">{category.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-gray-900">{category.name}</p>
+                      {category.isDefault && (
+                        <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">
+                          Default
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm text-gray-500">
                       Slug: {category.slug} • {category.photoCount || 0} photos
                     </p>
@@ -189,14 +197,12 @@ export default function Categories() {
                     <button
                       onClick={() => setEditingCategory(category)}
                       className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                      disabled={category.slug === 'uncategorized'}
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => handleDeleteCategory(category.id, category.name)}
                       className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
-                      disabled={category.slug === 'uncategorized'}
                     >
                       Delete
                     </button>
@@ -239,6 +245,20 @@ export default function Categories() {
                     required
                   />
                 </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="isDefault"
+                    checked={editingCategory.isDefault}
+                    onChange={(e) =>
+                      setEditingCategory({ ...editingCategory, isDefault: e.target.checked })
+                    }
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <label htmlFor="isDefault" className="text-sm font-medium text-gray-700">
+                    Set as default category for new uploads
+                  </label>
+                </div>
                 <div className="flex gap-2">
                   <button
                     type="submit"
@@ -265,7 +285,7 @@ export default function Categories() {
         <ConfirmDialog
           isOpen={true}
           title="Delete Category"
-          message={`Are you sure you want to delete "${deleteConfirm.name}"? Photos in this category will be moved to Uncategorized.`}
+          message={`Are you sure you want to delete "${deleteConfirm.name}"? Photos in this category will have no category assigned.`}
           confirmText="Delete"
           cancelText="Cancel"
           variant="danger"

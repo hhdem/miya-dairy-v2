@@ -27,6 +27,9 @@ export class Category {
   @Column({ type: 'integer', default: 0 })
   photoCount!: number; // Denormalized for performance
 
+  @Column({ type: 'boolean', default: false })
+  isDefault!: boolean; // Default category for new uploads
+
   @CreateDateColumn()
   createdAt!: Date;
 

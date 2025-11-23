@@ -112,15 +112,15 @@ export class PhotosService implements OnModuleInit {
       ),
     ]);
 
-    // Get uncategorized category
-    const uncategorizedCategory = await this.categoryRepository.findOne({
-      where: { slug: 'uncategorized' },
+    // Get default category if exists
+    const defaultCategory = await this.categoryRepository.findOne({
+      where: { isDefault: true },
     });
 
     // Create photo record
     const photo = this.photoRepository.create({
       userId,
-      categoryId: uncategorizedCategory?.id || null,
+      categoryId: defaultCategory?.id || null,
       filename: originalFilename,
       originalFormat: originalFormat as OriginalFormat,
       fileHash,
@@ -309,7 +309,7 @@ export class PhotosService implements OnModuleInit {
       throw new NotFoundException(`Photo with ID ${id} not found`);
     }
 
-    const updateFields: any = {};
+    const updateFields: Partial<Photo> = {};
 
     // Update category if provided
     if (updateData.categoryId !== undefined) {
@@ -387,6 +387,7 @@ export class PhotosService implements OnModuleInit {
             slug: photo.category.slug,
             description: photo.category.description || undefined,
             photoCount: photo.category.photoCount,
+            isDefault: photo.category.isDefault,
             createdAt: photo.category.createdAt,
             updatedAt: photo.category.updatedAt,
           }

@@ -81,11 +81,6 @@ export class CategoriesService {
       throw new NotFoundException(`Category with ID ${id} not found`);
     }
 
-    // Prevent updating the uncategorized category
-    if (category.slug === 'uncategorized') {
-      throw new ConflictException('Cannot update the Uncategorized category');
-    }
-
     if (updateData.name) {
       category.name = updateData.name;
       category.slug = this.generateSlug(updateData.name);
@@ -93,6 +88,18 @@ export class CategoriesService {
 
     if (updateData.description !== undefined) {
       category.description = updateData.description;
+    }
+
+    // Handle isDefault flag
+    if (updateData.isDefault !== undefined) {
+      if (updateData.isDefault) {
+        // If setting this category as default, unset all other defaults
+        await this.categoryRepository.update(
+          { isDefault: true },
+          { isDefault: false },
+        );
+      }
+      category.isDefault = updateData.isDefault;
     }
 
     const updated = await this.categoryRepository.save(category);
@@ -109,24 +116,10 @@ export class CategoriesService {
       throw new NotFoundException(`Category with ID ${id} not found`);
     }
 
-    // Prevent deleting the uncategorized category
-    if (category.slug === 'uncategorized') {
-      throw new ConflictException('Cannot delete the Uncategorized category');
-    }
-
-    // Get uncategorized category for reassignment
-    const uncategorized = await this.categoryRepository.findOne({
-      where: { slug: 'uncategorized' },
-    });
-
-    if (!uncategorized) {
-      throw new Error('Uncategorized category not found');
-    }
-
-    // Reassign photos to uncategorized
+    // Set photos in this category to null (no category)
     await this.categoryRepository.manager.query(
-      `UPDATE photos SET "categoryId" = $1 WHERE "categoryId" = $2`,
-      [uncategorized.id, id],
+      `UPDATE photos SET "categoryId" = NULL WHERE "categoryId" = $1`,
+      [id],
     );
 
     await this.categoryRepository.remove(category);
@@ -148,6 +141,7 @@ export class CategoriesService {
       slug: category.slug,
       description: category.description || undefined,
       photoCount: category.photoCount,
+      isDefault: category.isDefault,
       createdAt: category.createdAt,
       updatedAt: category.updatedAt,
     };

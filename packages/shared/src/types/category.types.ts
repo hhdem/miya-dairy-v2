@@ -4,6 +4,7 @@ export interface CategoryDto {
   slug: string;
   description?: string;
   photoCount: number;
+  isDefault: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -16,4 +17,5 @@ export interface CreateCategoryRequest {
 export interface UpdateCategoryRequest {
   name?: string;
   description?: string | null;
+  isDefault?: boolean;
 }
