@@ -8,7 +8,7 @@ export default defineConfig({
     port: 5174,
     proxy: {
       '/api': {
-        target: 'https://miya.im/api',
+        target: 'http://localhost:3000/api',
         changeOrigin: true,
       },
     },
