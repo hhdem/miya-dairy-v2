@@ -104,13 +104,12 @@ COPY --from=build --chown=nestjs:nodejs /app/packages/backend/package.json ./pac
 # Copy root package.json for workspace resolution
 COPY --chown=nestjs:nodejs package.json ./
 
+# Copy ML models from infrastructure directory
+COPY --chown=nestjs:nodejs infrastructure/ml-models /app/infrastructure/ml-models
+
 # Create uploads directory with proper permissions
 RUN mkdir -p /app/uploads/original /app/uploads/medium /app/uploads/thumbnail && \
     chown -R nestjs:nodejs /app/uploads
-
-# Create models directory for ML models
-RUN mkdir -p /app/models && \
-    chown -R nestjs:nodejs /app/models
 
 # Switch to non-root user
 USER nestjs
