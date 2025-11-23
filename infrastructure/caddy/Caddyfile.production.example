@@ -1,70 +1,40 @@
 miya.im www.miya.im {
-    # 启用 gzip 压缩
-    encode gzip
-    
-    # 配置 ACME 邮箱（用于 SSL 证书通知）
     tls lukelukewe@gmail.com
-    
-    # 后端 API 反向代理（优先级最高）
-    handle /api/* {
-        reverse_proxy miya-dairy-backend:3000
-    }
-    
-    # 上传文件（静态资源）
-    handle /uploads/* {
-        # 设置缓存头
-        header Cache-Control "public, max-age=31536000"
-        root * /srv
-        file_server
-    }
-    
-    # 管理后台（需要认证的路由）
-    handle_path /admin/* {
-        root * /srv/admin
-        try_files {path} /index.html
-        file_server
-        
-        # 可选：添加基本认证保护
-        # basicauth {
-        #     admin $2a$14$...  # 使用 caddy hash-password 生成
-        # }
-    }
-    
-    # 公共前端
-    handle_path /public/* {
-        root * /srv/public
-        try_files {path} /index.html
-        file_server
-    }
 
-    # 根路径 - 直接提供公共前端（不重定向）
-    handle {
-        root * /srv/public
-        try_files {path} /index.html
-        file_server
-    }
-    
-    # 安全头部
-    header {
-        # 启用 HSTS
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        # 防止点击劫持
-        X-Frame-Options "SAMEORIGIN"
-        # 防止 MIME 类型嗅探
-        X-Content-Type-Options "nosniff"
-        # XSS 保护
-        X-XSS-Protection "1; mode=block"
-        # 引用策略
-        Referrer-Policy "strict-origin-when-cross-origin"
-    }
-    
-    # 访问日志
-    log {
-        output file /var/log/caddy/access.log {
-            roll_size 100mb
-            roll_keep 10
+    # 使用 route 确保路由按顺序评估
+    route {
+        # 后端 API - 必须在最前面
+        reverse_proxy /api/* miya-dairy-backend:3000
+
+        # 上传文件
+        handle /uploads/* {
+            root * /srv
+            file_server
         }
-        format json
+
+        # 管理后台
+        handle_path /admin/* {
+            root * /srv/admin
+            try_files {path} /index.html
+            file_server
+        }
+
+        # 公共前端（带 /public 前缀）
+        handle_path /public/* {
+            root * /srv/public
+            try_files {path} /index.html
+            file_server
+        }
+
+        # 根路径 - 重定向到 /public/
+        redir / /public/ permanent
+
+        # 其他路径 - 提供公共前端（fallback）
+        handle {
+            root * /srv/public
+            try_files {path} /index.html
+            file_server
+        }
     }
 }
 
