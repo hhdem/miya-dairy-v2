@@ -309,24 +309,41 @@ export class PhotosService implements OnModuleInit {
       throw new NotFoundException(`Photo with ID ${id} not found`);
     }
 
+    const updateFields: any = {};
+
     // Update category if provided
     if (updateData.categoryId !== undefined) {
-      photo.categoryId = updateData.categoryId;
+      updateFields.categoryId = updateData.categoryId;
     }
 
     // Update visibility if provided
     if (updateData.visibility) {
-      photo.visibility = updateData.visibility as PhotoVisibility;
+      updateFields.visibility = updateData.visibility as PhotoVisibility;
     }
 
-    // Update createdAt if provided
+    // Update createdAt if provided (use QueryBuilder to bypass @CreateDateColumn protection)
     if (updateData.createdAt) {
-      photo.createdAt = new Date(updateData.createdAt);
+      updateFields.createdAt = new Date(updateData.createdAt);
     }
 
-    const updatedPhoto = await this.photoRepository.save(photo);
+    // Use QueryBuilder for createdAt, otherwise use save()
+    if (updateData.createdAt) {
+      await this.photoRepository
+        .createQueryBuilder()
+        .update(Photo)
+        .set(updateFields)
+        .where('id = :id', { id })
+        .execute();
+    } else {
+      // For other fields, use save()
+      Object.assign(photo, updateFields);
+      await this.photoRepository.save(photo);
+    }
 
-    return this.toPhotoDto(updatedPhoto);
+    // Fetch updated photo
+    const updatedPhoto = await this.photoRepository.findOne({ where: { id } });
+
+    return this.toPhotoDto(updatedPhoto!);
   }
 
   async delete(id: string): Promise<void> {

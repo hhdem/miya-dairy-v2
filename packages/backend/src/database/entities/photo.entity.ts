@@ -2,7 +2,6 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
-  CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
   OneToOne,
@@ -80,7 +79,7 @@ export class Photo {
   @Column({ type: 'timestamp' })
   uploadedAt!: Date;
 
-  @CreateDateColumn()
+  @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   createdAt!: Date;
 
   @UpdateDateColumn()
