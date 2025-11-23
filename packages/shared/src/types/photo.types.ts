@@ -35,6 +35,7 @@ export interface PaginationMeta {
 export interface UpdatePhotoRequest {
   categoryId?: string | null;
   visibility?: 'public' | 'private';
+  createdAt?: Date | string;
 }
 
 export interface PhotoTagDto {

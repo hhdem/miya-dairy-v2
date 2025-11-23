@@ -22,9 +22,11 @@ export default function Dashboard() {
   const [showBatchMenu, setShowBatchMenu] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showTagModal, setShowTagModal] = useState(false);
+  const [showDateModal, setShowDateModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [batchCategoryId, setBatchCategoryId] = useState<string>('');
   const [batchTagName, setBatchTagName] = useState('');
+  const [batchCreatedAt, setBatchCreatedAt] = useState<string>('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -166,6 +168,26 @@ export default function Dashboard() {
       loadData();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Batch tag failed');
+    }
+  };
+
+  const handleBatchSetCreatedAt = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedPhotos.size === 0 || !batchCreatedAt) return;
+
+    try {
+      await Promise.all(
+        Array.from(selectedPhotos).map((photoId) =>
+          photosApi.update(photoId, { createdAt: new Date(batchCreatedAt) })
+        )
+      );
+      toast.success(`Updated ${selectedPhotos.size} photos' creation date`);
+      clearSelection();
+      setShowDateModal(false);
+      setBatchCreatedAt('');
+      loadData();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Batch update failed');
     }
   };
 
@@ -329,6 +351,15 @@ export default function Dashboard() {
                       className="block w-full text-left px-4 py-2 hover:bg-gray-100"
                     >
                       Add Tag
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowDateModal(true);
+                        setShowBatchMenu(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                    >
+                      Set Creation Date
                     </button>
                     <hr className="my-1" />
                     <button
@@ -522,6 +553,52 @@ export default function Dashboard() {
                   onClick={() => {
                     setShowTagModal(false);
                     setBatchTagName('');
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Set Creation Date Modal */}
+      {showDateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h2 className="text-xl font-semibold mb-4">
+              Set Creation Date ({selectedPhotos.size} photos)
+            </h2>
+            <form onSubmit={handleBatchSetCreatedAt} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Creation Date
+                </label>
+                <input
+                  type="datetime-local"
+                  value={batchCreatedAt}
+                  onChange={(e) => setBatchCreatedAt(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  This will update the creation date for all selected photos
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  Update Date
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDateModal(false);
+                    setBatchCreatedAt('');
                   }}
                   className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
                 >

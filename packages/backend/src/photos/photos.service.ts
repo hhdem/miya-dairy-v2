@@ -319,6 +319,11 @@ export class PhotosService implements OnModuleInit {
       photo.visibility = updateData.visibility as PhotoVisibility;
     }
 
+    // Update createdAt if provided
+    if (updateData.createdAt) {
+      photo.createdAt = new Date(updateData.createdAt);
+    }
+
     const updatedPhoto = await this.photoRepository.save(photo);
 
     return this.toPhotoDto(updatedPhoto);
