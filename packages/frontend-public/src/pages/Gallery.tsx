@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Masonry from 'react-masonry-css';
 import { galleryApi } from '../api/gallery';
 import { getImageUrl } from '../api/client';
 import type { PhotoDto, CategoryDto, TagDto } from '@miya-dairy/shared';
@@ -19,6 +20,9 @@ export default function Gallery() {
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [tags, setTags] = useState<TagDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [selectedPhoto, setSelectedPhoto] = useState<PhotoDto | null>(null);
@@ -28,21 +32,74 @@ export default function Gallery() {
   const [mergedView, setMergedView] = useState(() => isMobile()); // Mobile: merged, Desktop: expanded
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
+  // Use ref to track if we're currently loading to prevent duplicate requests
+  const isLoadingRef = useRef(false);
+
   useEffect(() => {
     loadData();
   }, []);
 
+  // Memoize loadMorePhotos to prevent recreating on every render
+  const loadMorePhotos = useCallback(async () => {
+    // Double-check with ref to prevent race conditions
+    if (isLoadingRef.current || loadingMore || !hasMore) return;
+
+    isLoadingRef.current = true;
+    setLoadingMore(true);
+
+    try {
+      const nextPage = page + 1;
+      const photosResponse = await galleryApi.getPhotos(nextPage, 10);
+
+      const publicPhotos = photosResponse.data.filter((p) => p.visibility === 'public');
+
+      // Append new photos to existing ones
+      setPhotos((prev) => [...prev, ...publicPhotos]);
+      setPage(nextPage);
+      setHasMore(photosResponse.meta.page < photosResponse.meta.totalPages);
+    } catch (error) {
+      console.error('Failed to load more photos:', error);
+    } finally {
+      setLoadingMore(false);
+      isLoadingRef.current = false;
+    }
+  }, [loadingMore, hasMore, page]);
+
+  // Infinite scroll effect
+  useEffect(() => {
+    const handleScroll = () => {
+      if (isLoadingRef.current || loadingMore || !hasMore) return;
+
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      const scrollHeight = document.documentElement.scrollHeight;
+      const clientHeight = document.documentElement.clientHeight;
+
+      // Load more when user scrolls to 80% of the page
+      if (scrollTop + clientHeight >= scrollHeight * 0.8) {
+        loadMorePhotos();
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [loadMorePhotos, loadingMore, hasMore]);
+
   const loadData = async () => {
     try {
       const [photosResponse, categoriesData, tagsData] = await Promise.all([
-        galleryApi.getPhotos(1, 1000), // Load all photos
+        galleryApi.getPhotos(1, 10),
         galleryApi.getCategories(),
         galleryApi.getTags(),
       ]);
 
-      setPhotos(photosResponse.data.filter((p) => p.visibility === 'public'));
+      const publicPhotos = photosResponse.data.filter((p) => p.visibility === 'public');
+      setPhotos(publicPhotos);
       setCategories(categoriesData);
       setTags(tagsData);
+
+      // Check if there are more photos to load
+      setHasMore(photosResponse.meta.page < photosResponse.meta.totalPages);
+      setPage(1);
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -248,7 +305,28 @@ export default function Gallery() {
             <p className="text-lg">No photos match your filters</p>
           </div>
         ) : (
-          renderGroupedPhotos()
+          <>
+            {renderGroupedPhotos()}
+
+            {/* Loading More Indicator */}
+            {loadingMore && (
+              <div className="flex justify-center items-center py-12">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-12 h-12 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin" />
+                  <p className="text-gray-600 text-sm">Loading more photos...</p>
+                </div>
+              </div>
+            )}
+
+            {/* End of Results */}
+            {!hasMore && photos.length > 0 && (
+              <div className="text-center py-12">
+                <p className="text-gray-500 text-sm">
+                  🎉 You've reached the end! All {photos.length} photos loaded.
+                </p>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -555,19 +633,33 @@ function MasonryGrid({
   photos: PhotoDto[];
   onPhotoClick: (photo: PhotoDto) => void;
 }) {
+  // Breakpoint configuration for responsive columns
+  const breakpointColumnsObj = {
+    default: 4,  // 4 columns on extra large screens
+    1536: 4,     // xl: 4 columns
+    1280: 3,     // lg: 3 columns
+    768: 2,      // md: 2 columns
+    640: 1,      // sm: 1 column
+  };
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+    <Masonry
+      breakpointCols={breakpointColumnsObj}
+      className="flex -ml-4 w-auto"
+      columnClassName="pl-4 bg-clip-padding"
+    >
       {photos.map((photo, index) => (
         <motion.div
           key={photo.id}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: index * 0.05 }}
+          className="mb-4"
         >
           <PhotoCard photo={photo} onClick={() => onPhotoClick(photo)} />
         </motion.div>
       ))}
-    </div>
+    </Masonry>
   );
 }
 
