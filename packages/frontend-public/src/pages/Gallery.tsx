@@ -49,7 +49,7 @@ export default function Gallery() {
 
     try {
       const nextPage = page + 1;
-      const photosResponse = await galleryApi.getPhotos(nextPage, 20);
+      const photosResponse = await galleryApi.getPhotos(nextPage, 50);
 
       const publicPhotos = photosResponse.data.filter((p) => p.visibility === 'public');
 
