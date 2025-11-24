@@ -49,7 +49,7 @@ export default function Gallery() {
 
     try {
       const nextPage = page + 1;
-      const photosResponse = await galleryApi.getPhotos(nextPage, 50);
+      const photosResponse = await galleryApi.getPhotos(nextPage, 20);
 
       const publicPhotos = photosResponse.data.filter((p) => p.visibility === 'public');
 
@@ -269,7 +269,23 @@ export default function Gallery() {
               <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
                 Miya Dairy Gallery
               </h1>
-              <p className="text-gray-600 mt-2">{sortedPhotos.length} photos loaded</p>
+              <div className="flex items-center gap-2 mt-2">
+                <p className="text-gray-600">{sortedPhotos.length} photos loaded</p>
+                {hasMore && (
+                  <button
+                    onClick={loadMorePhotos}
+                    disabled={loadingMore}
+                    className="group p-1 hover:bg-purple-50 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Load more photos"
+                  >
+                    {loadingMore ? (
+                      <div className="w-4 h-4 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" />
+                    ) : (
+                      <IconPhotoDown className="w-4 h-4 text-purple-600 group-hover:text-purple-700 transition-colors" />
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
             <button
               onClick={() => setDrawerOpen(true)}
