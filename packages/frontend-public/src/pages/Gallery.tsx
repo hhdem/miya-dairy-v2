@@ -523,29 +523,27 @@ function MergedCard({
   const remainingCount = photos.length - previewPhotos.length;
 
   return (
-    <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-4">
-      <motion.div
-        whileHover={{ scale: 1.02 }}
-        onClick={onToggle}
-        className="relative cursor-pointer rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all bg-white break-inside-avoid"
-      >
-        <div className="grid grid-cols-3 gap-1 p-1">
-          {previewPhotos.map((photo) => (
-            <MergedCardImage key={photo.id} photo={photo} />
-          ))}
-        </div>
-        {remainingCount > 0 && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/25 backdrop-blur-sm">
-            <div className="text-white text-3xl font-bold drop-shadow-lg">
-              +{remainingCount}
-            </div>
+    <motion.div
+      whileHover={{ scale: 1.02 }}
+      onClick={onToggle}
+      className="relative cursor-pointer rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all bg-white"
+    >
+      <div className="grid grid-cols-3 gap-1 p-1">
+        {previewPhotos.map((photo) => (
+          <MergedCardImage key={photo.id} photo={photo} />
+        ))}
+      </div>
+      {remainingCount > 0 && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/25 backdrop-blur-sm">
+          <div className="text-white text-3xl font-bold drop-shadow-lg">
+            +{remainingCount}
           </div>
-        )}
-        <div className="absolute top-2 right-2 bg-white/95 backdrop-blur-sm px-2 py-1 rounded-full text-xs font-semibold text-gray-700 shadow-md">
-          {photos.length} photos
         </div>
-      </motion.div>
-    </div>
+      )}
+      <div className="absolute top-2 right-2 bg-white/95 backdrop-blur-sm px-2 py-1 rounded-full text-xs font-semibold text-gray-700 shadow-md">
+        {photos.length} photos
+      </div>
+    </motion.div>
   );
 }
 
@@ -558,14 +556,13 @@ function MasonryGrid({
   onPhotoClick: (photo: PhotoDto) => void;
 }) {
   return (
-    <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
       {photos.map((photo, index) => (
         <motion.div
           key={photo.id}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: index * 0.05 }}
-          className="break-inside-avoid"
         >
           <PhotoCard photo={photo} onClick={() => onPhotoClick(photo)} />
         </motion.div>
