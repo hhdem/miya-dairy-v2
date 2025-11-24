@@ -286,7 +286,7 @@ export default function Gallery() {
               <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
                 Miya Dairy Gallery
               </h1>
-              <p className="text-gray-600 mt-2">{sortedPhotos.length} photos</p>
+              <p className="text-gray-600 mt-2">{sortedPhotos.length} photos loaded</p>
             </div>
             <button
               onClick={() => setDrawerOpen(true)}
