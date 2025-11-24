@@ -5,7 +5,7 @@ import { galleryApi } from '../api/gallery';
 import { getImageUrl } from '../api/client';
 import type { PhotoDto, CategoryDto, TagDto } from '@miya-dairy/shared';
 import { cn, formatDate, groupPhotosByDate, groupPhotosByCategory } from '../lib/utils';
-import { IconCalendar, IconFolder, IconTag, IconGrid3x3, IconMenu2, IconX, IconSortDescending, IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
+import { IconCalendar, IconFolder, IconTag, IconGrid3x3, IconMenu2, IconX, IconSortDescending, IconChevronLeft, IconChevronRight, IconPhotoDown } from '@tabler/icons-react';
 
 type GroupMode = 'date' | 'category' | 'none';
 type SortMode = 'date-desc' | 'category-name';
@@ -49,7 +49,7 @@ export default function Gallery() {
 
     try {
       const nextPage = page + 1;
-      const photosResponse = await galleryApi.getPhotos(nextPage);
+      const photosResponse = await galleryApi.getPhotos(nextPage, 10);
 
       const publicPhotos = photosResponse.data.filter((p) => p.visibility === 'public');
 
@@ -65,29 +65,12 @@ export default function Gallery() {
     }
   }, [loadingMore, hasMore, page]);
 
-  // Infinite scroll effect
-  useEffect(() => {
-    const handleScroll = () => {
-      if (isLoadingRef.current || loadingMore || !hasMore) return;
-
-      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-      const scrollHeight = document.documentElement.scrollHeight;
-      const clientHeight = document.documentElement.clientHeight;
-
-      // Load more when user scrolls to 80% of the page
-      if (scrollTop + clientHeight >= scrollHeight * 0.8) {
-        loadMorePhotos();
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [loadMorePhotos, loadingMore, hasMore]);
+  // Removed infinite scroll - now using manual "Load More" button
 
   const loadData = async () => {
     try {
       const [photosResponse, categoriesData, tagsData] = await Promise.all([
-        galleryApi.getPhotos(1, 50),
+        galleryApi.getPhotos(1, 10),
         galleryApi.getCategories(),
         galleryApi.getTags(),
       ]);
@@ -308,22 +291,38 @@ export default function Gallery() {
           <>
             {renderGroupedPhotos()}
 
-            {/* Loading More Indicator */}
-            {loadingMore && (
+            {/* Load More Button */}
+            {hasMore && (
               <div className="flex justify-center items-center py-12">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="w-12 h-12 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin" />
-                  <p className="text-gray-600 text-sm">Loading more photos...</p>
-                </div>
+                <button
+                  onClick={loadMorePhotos}
+                  disabled={loadingMore}
+                  className="group relative px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 active:scale-95"
+                >
+                  {loadingMore ? (
+                    <div className="flex items-center gap-3">
+                      <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Loading...</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span>Load More Photos</span>
+                      <IconPhotoDown className="w-5 h-5 group-hover:translate-y-1 transition-transform" />
+                    </div>
+                  )}
+                </button>
               </div>
             )}
 
             {/* End of Results */}
             {!hasMore && photos.length > 0 && (
               <div className="text-center py-12">
-                <p className="text-gray-500 text-sm">
-                  🎉 You've reached the end! All {photos.length} photos loaded.
-                </p>
+                <div className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-50 to-pink-50 rounded-full border border-purple-200">
+                  <span className="text-2xl">🎉</span>
+                  <p className="text-purple-700 font-medium">
+                    All {photos.length} photos loaded!
+                  </p>
+                </div>
               </div>
             )}
           </>
