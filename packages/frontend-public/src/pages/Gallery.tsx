@@ -49,7 +49,7 @@ export default function Gallery() {
 
     try {
       const nextPage = page + 1;
-      const photosResponse = await galleryApi.getPhotos(nextPage, 10);
+      const photosResponse = await galleryApi.getPhotos(nextPage);
 
       const publicPhotos = photosResponse.data.filter((p) => p.visibility === 'public');
 
@@ -87,7 +87,7 @@ export default function Gallery() {
   const loadData = async () => {
     try {
       const [photosResponse, categoriesData, tagsData] = await Promise.all([
-        galleryApi.getPhotos(1, 10),
+        galleryApi.getPhotos(1, 50),
         galleryApi.getCategories(),
         galleryApi.getTags(),
       ]);
